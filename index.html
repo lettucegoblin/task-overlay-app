@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <meta http-equiv="X-Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>Task Overlay</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <div id="task-container" title="Click to see next task">
+            Loading tasks...
+        </div>
+        <div id="button-column">
+            <button id="complete-task" class="task-button" title="Mark task as complete">✓</button>
+            <button id="add-task" class="task-button" title="Add new task">+</button>
+        </div>
+    </div>
+
+    <div id="add-task-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Add New Task</h3>
+            <input type="text" id="new-task-content" placeholder="Enter task...">
+            <select id="project-select">
+                <option value="">Select Project...</option>
+            </select>
+            <button id="submit-new-task">Add Task</button>
+        </div>
+    </div>
+
+    <script src="./renderer.js"></script>
+</body>
+</html>
