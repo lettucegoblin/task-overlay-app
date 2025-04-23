@@ -1,9 +1,10 @@
 // main.js
 // Modules to control application life and create native browser window
-// Add Tray and Menu
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu } = require('electron');
+// Add Tray, Menu, and Dialog
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog } = require('electron');
 const path = require('path');
 const https = require('https'); // Require the https module
+const fs = require('fs'); // For file operations with .env
 require('dotenv').config(); // Load .env file
 
 // --- Todoist Integration ---
@@ -12,7 +13,7 @@ let todoistTaskIds = []; // Array to hold task IDs corresponding to tasks
 let todoistProjects = []; // Array to hold projects fetched from Todoist
 let selectedProjectId = null; // ID of the project to filter by, null for all
 let currentTaskIndex = 0;
-const TODOIST_API_KEY = process.env.TODOIST_API_KEY;
+let TODOIST_API_KEY = process.env.TODOIST_API_KEY;
 const TODOIST_API_BASE_URL = 'https://api.todoist.com/rest/v2'; // Use v2 API base
 
 // Function to fetch projects
@@ -64,13 +65,84 @@ function fetchTodoistProjects() {
     req.end();
 }
 
+// Function to save API key to .env file
+function saveApiKey(apiKey) {
+    console.log('Saving new API key...');
+    try {
+        const envPath = path.join(__dirname, '.env');
+        const envContent = `TODOIST_API_KEY=${apiKey}`;
+        
+        fs.writeFileSync(envPath, envContent);
+        console.log('API key saved to .env file');
+        
+        // Update the current TODOIST_API_KEY variable
+        process.env.TODOIST_API_KEY = apiKey;
+        TODOIST_API_KEY = apiKey; // Update the variable in memory
+        
+        // Refresh data with the new API key
+        fetchTodoistProjects();
+        fetchTodoistTasks(selectedProjectId);
+    } catch (error) {
+        console.error('Error saving API key to .env file:', error);
+        dialog.showErrorBox(
+            'Error Saving API Key',
+            'Could not save your API key. Please try again or create a .env file manually.'
+        );
+    }
+}
+
+// Function to check if API key exists and is valid
+function apiKeyExists() {
+    return !!process.env.TODOIST_API_KEY;
+}
+
+// Function to clear API key from .env file
+function clearApiKey() {
+    console.log('Clearing API key...');
+    try {
+        const envPath = path.join(__dirname, '.env');
+        // Check if file exists before trying to clear it
+        if (fs.existsSync(envPath)) {
+            fs.writeFileSync(envPath, '');
+            console.log('API key cleared from .env file');
+            
+            // Clear the API key variables
+            process.env.TODOIST_API_KEY = '';
+            TODOIST_API_KEY = '';
+            
+            // Reset data
+            todoistTasks = [];
+            todoistTaskIds = [];
+            todoistProjects = [];
+            currentTaskIndex = 0;
+            
+            // Notify the renderer that API key is missing
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('display-task', 'Click here to add your Todoist API key', 'api-key-missing', []);
+            }
+            
+            return true;
+        } else {
+            console.log('.env file does not exist, nothing to clear');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error clearing API key from .env file:', error);
+        dialog.showErrorBox(
+            'Error Clearing API Key',
+            'Could not clear your API key. Please try deleting the .env file manually.'
+        );
+        return false;
+    }
+}
+
 // Modified function to fetch tasks, accepting an optional projectId
 function fetchTodoistTasks(projectId = null) {
-    if (!TODOIST_API_KEY) {
+    if (!apiKeyExists()) {
         console.error('Todoist API key not found in .env file.');
-        mainWindow?.webContents.send('display-task', 'Error: API Key Missing');
-        todoistTasks = ['Error: API Key Missing'];
-        todoistTaskIds = [''];
+        mainWindow?.webContents.send('display-task', 'Click here to add your Todoist API key', 'api-key-missing', todoistProjects);
+        todoistTasks = ['Click here to add your Todoist API key'];
+        todoistTaskIds = ['api-key-missing'];
         currentTaskIndex = 0;
         return;
     }
@@ -289,7 +361,7 @@ function createWindow() {
     const { width, height } = primaryDisplay.workAreaSize;
 
     const windowWidth = 350;
-    const windowHeight = 60;
+    const windowHeight = 160;
     const padding = 20;
     const windowX = width - windowWidth - padding;
     const windowY = height - windowHeight - padding;
@@ -432,6 +504,17 @@ ipcMain.on('resize-window', (event, height) => {
     }
 });
 
+// on save-api-key
+ipcMain.on('save-api-key', (event, apiKey) => {
+    console.log('Main: Received save-api-key:', apiKey);
+    if (apiKey) {
+        saveApiKey(apiKey); // Save the API key
+    }
+    else {
+        console.error('API key is missing or empty');
+    }
+});
+
 // Listen for save position and resize
 ipcMain.on('save-position-and-resize', (event, height) => {
     console.log(`Main: Received save-position-and-resize to height ${height}px`);
@@ -498,6 +581,12 @@ ipcMain.on('get-projects', (event) => {
         // Try to fetch projects
         fetchTodoistProjects();
     }
+});
+
+// Listen for request to prompt for API key
+ipcMain.on('request-api-key', (event) => {
+    console.log('Main: Received request-api-key');
+    promptForApiKey();
 });
 
 // --- Drag Handling ---
@@ -641,6 +730,15 @@ function createTray() {
                 }
             }
         },
+        {
+            label: 'Clear API Token',
+            click: () => {
+                console.log('Clearing API token triggered.');
+                clearApiKey();
+                // Rebuild the tray menu after changing token
+                createTray();
+            }
+        },
         { type: 'separator' },
         {
             label: 'Quit',
@@ -660,7 +758,7 @@ function createTray() {
 
 app.whenReady().then(() => {
     createWindow();
-    // createTray() is now called after projects are fetched in did-finish-load
+    createTray() //is now called after projects are fetched in did-finish-load
     // fetchTodoistProjects(); // Moved to did-finish-load
 });
 

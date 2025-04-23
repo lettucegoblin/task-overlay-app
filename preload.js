@@ -28,6 +28,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('projects-list', (_event, projectsList) => callback(projectsList));
     },
     
+    // --- API Key Operations ---
+    requestApiKey: () => {
+        console.log('Preload: Sending request-api-key');
+        ipcRenderer.send('request-api-key');
+    },
+    saveApiKey: (apiKey) => {
+        console.log('Preload: Sending save-api-key');
+        ipcRenderer.send('save-api-key', apiKey);
+    },
+    
     // --- Window Operations ---
     savePositionAndResize: (height) => {
         console.log('Preload: Sending save-position-and-resize', height);

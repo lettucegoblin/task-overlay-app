@@ -39,16 +39,66 @@ if (window.electronAPI) {
     // --- Task Display Listener ---
     window.electronAPI.onDisplayTask((taskText, taskId, projectsList) => {
         console.log("Renderer received task:", taskText, "ID:", taskId);
-        taskContainer.textContent = taskText || 'No task.';
-        currentTaskId = taskId;
-
-        // Update complete button state
-        if (taskId) {
-            completeTaskBtn.disabled = false;
-            completeTaskBtn.title = "Mark task as complete";
-        } else {
+        
+        // Get the button column
+        const buttonColumn = document.getElementById('button-column');
+        
+        // Check if this is the API key missing message
+        if (taskId === 'api-key-missing') {
+            // Hide the button column until API key is set
+            buttonColumn.style.display = 'none';
+            
+            // Replace text with an inline API key input
+            taskContainer.innerHTML = `
+                <div style="width: 100%;">
+                    <input type="text" id="apiKeyInput" placeholder="Enter your Todoist API key" 
+                        style="width: 80%; padding: 8px; background-color: rgba(60, 60, 80, 0.8); 
+                        border: 1px solid rgba(80, 80, 100, 0.8); border-radius: 5px; color: white;">
+                    <button id="saveApiKeyBtn" 
+                        style="padding: 8px; background-color: rgba(50, 130, 50, 0.9); border: none; 
+                        border-radius: 5px; color: white; cursor: pointer; margin-left: 5px;">Save</button>
+                </div>
+                <div style="font-size: 12px; margin-top: 5px;">
+                    Find your API key in Todoist settings → Integrations
+                </div>
+            `;
+            
+            // Make sure the container doesn't act as a clickable element
+            taskContainer.style.cursor = 'default';
+            
+            // Add event listeners to the newly created elements
+            document.getElementById('saveApiKeyBtn').addEventListener('click', saveApiKey);
+            document.getElementById('apiKeyInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    saveApiKey();
+                }
+            });
+            
+            // Store the API key missing state
+            currentTaskId = 'api-key-missing';
+            
+            // Disable the complete task button as there's no real task
             completeTaskBtn.disabled = true;
-            completeTaskBtn.title = "No active task";
+            completeTaskBtn.title = "API key needed";
+        } else {
+            // Show the button column as API key is now set
+            buttonColumn.style.display = 'flex';
+            
+            // Regular task display
+            taskContainer.textContent = taskText || 'No task.';
+            currentTaskId = taskId;
+            
+            // Restore cursor for task cycling
+            taskContainer.style.cursor = 'pointer';
+            
+            // Update complete button state for normal tasks
+            if (taskId) {
+                completeTaskBtn.disabled = false;
+                completeTaskBtn.title = "Mark task as complete";
+            } else {
+                completeTaskBtn.disabled = true;
+                completeTaskBtn.title = "No active task";
+            }
         }
 
         // Update projects dropdown if we received a projects list
@@ -56,6 +106,17 @@ if (window.electronAPI) {
             populateProjectsDropdown(projectsList);
         }
     });
+
+    // Function to save API key from inline input
+    function saveApiKey() {
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        if (apiKey) {
+            console.log("Renderer: Saving API key");
+            window.electronAPI.saveApiKey(apiKey);
+            // Replace the input with a loading message
+            taskContainer.textContent = "Saving API key and loading tasks...";
+        }
+    }
 
     // --- Projects List Listener ---
     window.electronAPI.onProjectsReceived((projectsList) => {
@@ -68,6 +129,11 @@ if (window.electronAPI) {
 
     // --- Click Listener for Task Cycling (LEFT CLICK ONLY) ---
     taskContainer.addEventListener('click', (event) => {
+        // Skip click handling if we're dealing with the API key input
+        if (currentTaskId === 'api-key-missing') {
+            return; // Do nothing when showing the API key input
+        }
+        
         // Check if it was the primary button (usually left button)
         if (event.button === 0) {
             console.log("Renderer: Left-click detected, requesting next task.");
