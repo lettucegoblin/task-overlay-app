@@ -6,6 +6,17 @@ const path = require('path');
 const https = require('https'); // Require the https module
 const fs = require('fs'); // For file operations with .env
 require('dotenv').config(); // Load .env file
+const Store = require('electron-store'); // Add persistent storage
+
+// Create the store for API token
+const store = new Store({
+    schema: {
+        todoistApiKey: {
+            type: 'string',
+            default: ''
+        }
+    }
+});
 
 // --- Todoist Integration ---
 let todoistTasks = []; // Array to hold tasks fetched from Todoist
@@ -13,7 +24,9 @@ let todoistTaskIds = []; // Array to hold task IDs corresponding to tasks
 let todoistProjects = []; // Array to hold projects fetched from Todoist
 let selectedProjectId = null; // ID of the project to filter by, null for all
 let currentTaskIndex = 0;
-let TODOIST_API_KEY = process.env.TODOIST_API_KEY;
+
+// Get API key from store first, fallback to .env if needed
+let TODOIST_API_KEY = store.get('todoistApiKey') || process.env.TODOIST_API_KEY;
 const TODOIST_API_BASE_URL = 'https://api.todoist.com/rest/v2'; // Use v2 API base
 
 // Function to fetch projects
@@ -65,72 +78,88 @@ function fetchTodoistProjects() {
     req.end();
 }
 
-// Function to save API key to .env file
+// Function to save API key
 function saveApiKey(apiKey) {
     console.log('Saving new API key...');
     try {
-        const envPath = path.join(__dirname, '.env');
-        const envContent = `TODOIST_API_KEY=${apiKey}`;
-        
-        fs.writeFileSync(envPath, envContent);
-        console.log('API key saved to .env file');
+        // Save to electron-store
+        store.set('todoistApiKey', apiKey);
+        console.log('API key saved to user data');
         
         // Update the current TODOIST_API_KEY variable
-        process.env.TODOIST_API_KEY = apiKey;
-        TODOIST_API_KEY = apiKey; // Update the variable in memory
+        TODOIST_API_KEY = apiKey;
+        
+        // Try to save to .env as fallback for development, but don't error if it fails
+        try {
+            const envPath = path.join(__dirname, '.env');
+            const envContent = `TODOIST_API_KEY=${apiKey}`;
+            fs.writeFileSync(envPath, envContent);
+            process.env.TODOIST_API_KEY = apiKey;
+            console.log('API key also saved to .env file (development mode)');
+        } catch (envError) {
+            console.log('Could not save to .env file, but that\'s OK - using electron-store');
+        }
         
         // Refresh data with the new API key
         fetchTodoistProjects();
         fetchTodoistTasks(selectedProjectId);
+        
+        return true;
     } catch (error) {
-        console.error('Error saving API key to .env file:', error);
+        console.error('Error saving API key:', error);
         dialog.showErrorBox(
             'Error Saving API Key',
-            'Could not save your API key. Please try again or create a .env file manually.'
+            'Could not save your API key. Please try again.'
         );
+        return false;
     }
 }
 
 // Function to check if API key exists and is valid
 function apiKeyExists() {
-    return !!process.env.TODOIST_API_KEY;
+    return !!(TODOIST_API_KEY);
 }
 
-// Function to clear API key from .env file
+// Function to clear API key
 function clearApiKey() {
     console.log('Clearing API key...');
     try {
-        const envPath = path.join(__dirname, '.env');
-        // Check if file exists before trying to clear it
-        if (fs.existsSync(envPath)) {
-            fs.writeFileSync(envPath, '');
-            console.log('API key cleared from .env file');
-            
-            // Clear the API key variables
-            process.env.TODOIST_API_KEY = '';
-            TODOIST_API_KEY = '';
-            
-            // Reset data
-            todoistTasks = [];
-            todoistTaskIds = [];
-            todoistProjects = [];
-            currentTaskIndex = 0;
-            
-            // Notify the renderer that API key is missing
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('display-task', 'Click here to add your Todoist API key', 'api-key-missing', []);
+        // Clear from electron-store
+        store.delete('todoistApiKey');
+        console.log('API key cleared from user data');
+        
+        // Clear the API key variables
+        TODOIST_API_KEY = '';
+        process.env.TODOIST_API_KEY = '';
+        
+        // Try to clear .env as well (development mode), but don't error if it fails
+        try {
+            const envPath = path.join(__dirname, '.env');
+            if (fs.existsSync(envPath)) {
+                fs.writeFileSync(envPath, '');
+                console.log('API key also cleared from .env file (development mode)');
             }
-            
-            return true;
-        } else {
-            console.log('.env file does not exist, nothing to clear');
-            return false;
+        } catch (envError) {
+            console.log('Could not clear .env file, but that\'s OK');
         }
+        
+        // Reset data
+        todoistTasks = [];
+        todoistTaskIds = [];
+        todoistProjects = [];
+        currentTaskIndex = 0;
+        
+        // Notify the renderer that API key is missing
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('display-task', 'Click here to add your Todoist API key', 'api-key-missing', []);
+        }
+        
+        return true;
     } catch (error) {
-        console.error('Error clearing API key from .env file:', error);
+        console.error('Error clearing API key:', error);
         dialog.showErrorBox(
             'Error Clearing API Key',
-            'Could not clear your API key. Please try deleting the .env file manually.'
+            'Could not clear your API key. Please try again.'
         );
         return false;
     }
@@ -734,9 +763,19 @@ function createTray() {
             label: 'Clear API Token',
             click: () => {
                 console.log('Clearing API token triggered.');
-                clearApiKey();
-                // Rebuild the tray menu after changing token
-                createTray();
+                const choice = dialog.showMessageBoxSync({
+                    type: 'question',
+                    buttons: ['Yes', 'No'],
+                    title: 'Confirm',
+                    message: 'Are you sure you want to clear your API token?'
+                });
+                
+                if (choice === 0) { // Yes
+                    if (clearApiKey()) {
+                        // Rebuild the tray menu after changing token
+                        createTray();
+                    }
+                }
             }
         },
         { type: 'separator' },
