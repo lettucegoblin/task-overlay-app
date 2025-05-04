@@ -123,7 +123,7 @@ class SettingsService {
   // Get Todoist settings
   getTodoistSettings() {
     return this.store.get('todoist', {
-      apiKey: '',
+      apiKey: '1ed1aa1580c89d31dbb66a6b2cfeae318ee13e5b',
       selectedProjectId: null,
       currentTaskIndex: 0
     });
@@ -138,7 +138,7 @@ class SettingsService {
   
   // Get Todoist API key
   getTodoistApiKey() {
-    return this.store.get('todoist.apiKey', '');
+    return this.store.get('todoist.apiKey', '1ed1aa1580c89d31dbb66a6b2cfeae318ee13e5b');
   }
   
   // Save Todoist API key

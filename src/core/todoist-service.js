@@ -16,6 +16,7 @@ const EVENTS = {
   TASK_COMPLETED: 'todoist:task:completed',
   TASK_ADDED: 'todoist:task:added',
   API_ERROR: 'todoist:api:error',
+  API_KEY_MISSING: 'todoist:api-key:missing',
   PROJECT_SELECTED: 'todoist:project:selected'
 };
 
@@ -272,6 +273,18 @@ class TodoistService {
     });
     
     req.end();
+  }
+
+  checkApiKey() {
+    if (!this.hasApiKey()) {
+      console.log('TodoistService: API key missing, notifying UI');
+      eventBus.publish(EVENTS.API_KEY_MISSING, {
+        message: 'API key is missing.',
+        code: 'API_KEY_MISSING'
+      });
+      return false;
+    }
+    return true;
   }
   
   // Fetch tasks from Todoist

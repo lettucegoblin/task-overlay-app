@@ -93,6 +93,10 @@ function createWindow() {
  */
 async function initializeServices() {
   console.log('Initializing services...');
+
+  if(!await todoistService.checkApiKey()) {
+    return;
+  }
   
   // Initialize todoist service
   await todoistService.fetchProjects();
@@ -588,6 +592,10 @@ ipcMain.on('save-api-key', (event, apiKey) => {
   console.log('Main: Received save-api-key');
   if (apiKey) {
     todoistService.setApiKey(apiKey);
+    // reinitialize services
+    initializeServices().then(() => {
+      createTray(); // Rebuild tray menu
+    });
   }
 });
 
@@ -721,6 +729,33 @@ ipcMain.handle('save-app-settings', (event, settings) => {
   }
 });
 
+// Add IPC handler for getting available themes
+ipcMain.handle('get-available-themes', async () => {
+  const themes = Array.from(themeManager.getAllThemes().entries()).map(([name, theme]) => ({
+    name,
+    displayName: theme.displayName,
+    description: theme.description,
+    settings: theme.getSettings()
+  }));
+
+  return themes;
+});
+
+// Notify renderer of theme changes
+function notifyThemeChanged() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const activeTheme = themeManager.getActiveTheme();
+    if (activeTheme) {
+      mainWindow.webContents.send('theme-changed', {
+        name: activeTheme.name,
+        displayName: activeTheme.displayName,
+        description: activeTheme.description,
+        settings: activeTheme.getSettings()
+      });
+    }
+  }
+}
+
 // --- Drag Handling ---
 
 // Start drag
@@ -790,6 +825,13 @@ ipcMain.on('end-drag', () => {
 });
 
 // --- Event Listeners ---
+
+// Subscribe to Todoist events
+eventBus.subscribe('todoist:api-key:missing', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('display-task', 'Click here to add your Todoist API key', 'api-key-missing', []);
+  }
+});
 
 // Subscribe to Pomodoro events
 eventBus.subscribe(pomodoroService.getEvents().TIMER_TICK, (state) => {

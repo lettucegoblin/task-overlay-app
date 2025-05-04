@@ -90,12 +90,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     
     // --- NEW Theme Operations ---
-    getAvailableThemes: () => {
-        console.log('Preload: Sending get-available-themes');
-        ipcRenderer.send('get-available-themes');
+    getAvailableThemes: async () => {
+        console.log('Preload: Requesting available themes');
+        return await ipcRenderer.invoke('get-available-themes');
     },
     onThemesReceived: (callback) => {
         ipcRenderer.on('themes-list', (_event, themesList) => callback(themesList));
+    },
+    onThemeChanged: (callback) => {
+        ipcRenderer.on('theme-changed', (_event, theme) => callback(theme));
+    },
+    onThemeDisplayTask: (callback) => {
+        ipcRenderer.on('theme-display-task', (_event, data) => callback(data));
+    },
+    onThemeUpdatePomodoro: (callback) => {
+        ipcRenderer.on('theme-update-pomodoro', (_event, data) => callback(data));
+    },
+    onThemeNotification: (callback) => {
+        ipcRenderer.on('theme-show-notification', (_event, data) => callback(data));
+    },
+    onThemeSettingsChanged: (callback) => {
+        ipcRenderer.on('theme-settings-changed', (_event, data) => callback(data));
     },
     getActiveTheme: () => {
         console.log('Preload: Requesting active theme');
