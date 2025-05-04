@@ -418,6 +418,337 @@ let dragWindowStartBounds = null; // { x, y, width, height }
 // --- Added at top level with other state variables ---
 let originalWindowPosition = null; // To store the window position before resizing
 
+// --- Pomodoro Timer Integration ---
+// Add these variables with the other state variables at the top of main.js
+
+// Pomodoro state
+let pomodoroState = {
+  isActive: false,
+  isBreak: false,
+  workTime: 25, // in minutes
+  breakTime: 5, // in minutes
+  timeRemaining: 0, // in seconds
+  timerInterval: null,
+  workProjectId: null,
+  breakProjectId: null,
+  projectTaskMemory: {} // Stores the current task index for each project
+};
+
+// Load Pomodoro settings from store
+function loadPomodoroSettings() {
+  pomodoroState.workTime = store.get('pomodoroWorkTime', 25);
+  pomodoroState.breakTime = store.get('pomodoroBreakTime', 5);
+  pomodoroState.workProjectId = store.get('pomodoroWorkProjectId', null);
+  pomodoroState.breakProjectId = store.get('pomodoroBreakProjectId', null);
+  pomodoroState.projectTaskMemory = store.get('pomodoroProjectTaskMemory', {});
+  
+  console.log('Loaded Pomodoro settings:', pomodoroState);
+}
+
+// Save current Pomodoro settings to store
+function savePomodoroSettings() {
+  store.set('pomodoroWorkTime', pomodoroState.workTime);
+  store.set('pomodoroBreakTime', pomodoroState.breakTime);
+  store.set('pomodoroWorkProjectId', pomodoroState.workProjectId);
+  store.set('pomodoroBreakProjectId', pomodoroState.breakProjectId);
+  store.set('pomodoroProjectTaskMemory', pomodoroState.projectTaskMemory);
+  
+  console.log('Saved Pomodoro settings');
+}
+
+// Remember the current task for the current project
+function rememberCurrentTaskForProject(projectId) {
+  if (projectId && currentTaskIndex >= 0) {
+    pomodoroState.projectTaskMemory[projectId] = currentTaskIndex;
+    savePomodoroSettings();
+    console.log(`Remembered task index ${currentTaskIndex} for project ${projectId}`);
+  }
+}
+
+// Start the Pomodoro timer
+function startPomodoroTimer() {
+  if (pomodoroState.isActive) {
+    return; // Already running
+  }
+  
+  // Set the timer based on current mode
+  pomodoroState.isActive = true;
+  pomodoroState.timeRemaining = pomodoroState.isBreak ? 
+    pomodoroState.breakTime * 60 : 
+    pomodoroState.workTime * 60;
+  
+  // Ensure we're showing the right project based on the mode
+  const targetProjectId = pomodoroState.isBreak ? 
+    pomodoroState.breakProjectId : 
+    pomodoroState.workProjectId;
+  
+  // If we're switching projects and have a target, switch to it
+  if (targetProjectId && targetProjectId !== selectedProjectId) {
+    // Remember current task for the current project before switching
+    if (selectedProjectId) {
+      rememberCurrentTaskForProject(selectedProjectId);
+    }
+    
+    // Switch to target project
+    selectedProjectId = targetProjectId;
+    fetchTodoistTasks(selectedProjectId);
+    
+    // Restore remembered task index for this project if available
+    if (pomodoroState.projectTaskMemory[targetProjectId] !== undefined) {
+      currentTaskIndex = pomodoroState.projectTaskMemory[targetProjectId];
+      console.log(`Restored task index ${currentTaskIndex} for project ${targetProjectId}`);
+    }
+  }
+  
+  // Start the timer interval
+  pomodoroState.timerInterval = setInterval(() => {
+    updatePomodoroTimer();
+  }, 1000);
+  
+  // Update the UI
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', {
+      isActive: pomodoroState.isActive,
+      isBreak: pomodoroState.isBreak,
+      timeRemaining: pomodoroState.timeRemaining,
+      workTime: pomodoroState.workTime,
+      breakTime: pomodoroState.breakTime
+    });
+  }
+  
+  console.log(`Started ${pomodoroState.isBreak ? 'break' : 'work'} timer for ${pomodoroState.timeRemaining} seconds`);
+}
+
+// Pause the Pomodoro timer
+function pausePomodoroTimer() {
+  if (!pomodoroState.isActive) {
+    return; // Not running
+  }
+  
+  clearInterval(pomodoroState.timerInterval);
+  pomodoroState.timerInterval = null;
+  pomodoroState.isActive = false;
+  
+  // Update the UI
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', {
+      isActive: pomodoroState.isActive,
+      isBreak: pomodoroState.isBreak,
+      timeRemaining: pomodoroState.timeRemaining,
+      workTime: pomodoroState.workTime,
+      breakTime: pomodoroState.breakTime
+    });
+  }
+  
+  console.log('Paused Pomodoro timer');
+}
+
+// Reset the Pomodoro timer
+function resetPomodoroTimer() {
+  clearInterval(pomodoroState.timerInterval);
+  pomodoroState.timerInterval = null;
+  pomodoroState.isActive = false;
+  pomodoroState.isBreak = false;
+  pomodoroState.timeRemaining = pomodoroState.workTime * 60;
+  
+  // Update the UI
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', {
+      isActive: pomodoroState.isActive,
+      isBreak: pomodoroState.isBreak,
+      timeRemaining: pomodoroState.timeRemaining,
+      workTime: pomodoroState.workTime,
+      breakTime: pomodoroState.breakTime
+    });
+  }
+  
+  console.log('Reset Pomodoro timer');
+}
+
+// Update the timer every second
+function updatePomodoroTimer() {
+  if (!pomodoroState.isActive) {
+    return;
+  }
+  
+  pomodoroState.timeRemaining--;
+  
+  // Check if timer is complete
+  if (pomodoroState.timeRemaining <= 0) {
+    handlePomodoroTimerComplete();
+    return;
+  }
+  
+  // Update the UI every second
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', {
+      isActive: pomodoroState.isActive,
+      isBreak: pomodoroState.isBreak,
+      timeRemaining: pomodoroState.timeRemaining,
+      workTime: pomodoroState.workTime,
+      breakTime: pomodoroState.breakTime
+    });
+  }
+}
+
+// Handle timer completion
+function handlePomodoroTimerComplete() {
+  // Clear the current interval
+  clearInterval(pomodoroState.timerInterval);
+  pomodoroState.timerInterval = null;
+  
+  // Toggle between work and break
+  pomodoroState.isBreak = !pomodoroState.isBreak;
+  
+  // Remember current task for the current project before switching
+  if (selectedProjectId) {
+    rememberCurrentTaskForProject(selectedProjectId);
+  }
+  
+  // Send notification based on mode switch
+  const notificationTitle = pomodoroState.isBreak ? 
+    'Break Time!' : 
+    'Back to Work!';
+  const notificationBody = pomodoroState.isBreak ? 
+    `Time for a ${pomodoroState.breakTime} minute break.` : 
+    `Time for a ${pomodoroState.workTime} minute work session.`;
+  
+  // Show desktop notification
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('show-notification', {
+      title: notificationTitle,
+      body: notificationBody
+    });
+  }
+  
+  // Restart the timer in the new mode
+  startPomodoroTimer();
+}
+
+// Set the work time
+function setPomodoroWorkTime(minutes) {
+  pomodoroState.workTime = minutes;
+  savePomodoroSettings();
+  
+  // If we're currently in work mode and the timer is not active,
+  // update the time remaining
+  if (!pomodoroState.isBreak && !pomodoroState.isActive) {
+    pomodoroState.timeRemaining = minutes * 60;
+  }
+  
+  // Update UI
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', {
+      isActive: pomodoroState.isActive,
+      isBreak: pomodoroState.isBreak,
+      timeRemaining: pomodoroState.timeRemaining,
+      workTime: pomodoroState.workTime,
+      breakTime: pomodoroState.breakTime
+    });
+  }
+  
+  console.log(`Set work time to ${minutes} minutes`);
+}
+
+// Set the break time
+function setPomodoroBreakTime(minutes) {
+  pomodoroState.breakTime = minutes;
+  savePomodoroSettings();
+  
+  // If we're currently in break mode and the timer is not active,
+  // update the time remaining
+  if (pomodoroState.isBreak && !pomodoroState.isActive) {
+    pomodoroState.timeRemaining = minutes * 60;
+  }
+  
+  // Update UI
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', {
+      isActive: pomodoroState.isActive,
+      isBreak: pomodoroState.isBreak,
+      timeRemaining: pomodoroState.timeRemaining,
+      workTime: pomodoroState.workTime,
+      breakTime: pomodoroState.breakTime
+    });
+  }
+  
+  console.log(`Set break time to ${minutes} minutes`);
+}
+
+// Set the break project for the current work project
+function setBreakProjectForCurrentProject(breakProjectId) {
+  if (!selectedProjectId) {
+    console.log('No work project selected');
+    return;
+  }
+  
+  pomodoroState.workProjectId = selectedProjectId;
+  pomodoroState.breakProjectId = breakProjectId;
+  savePomodoroSettings();
+  
+  console.log(`Set work project ${selectedProjectId} and break project ${breakProjectId}`);
+}
+
+// Add this to the createTray function to include Pomodoro settings in the tray menu
+function createPomodoroSubmenu() {
+  // Generate minutes for dropdown from 1 to 60
+  const generateMinutesSubmenu = (current, callback) => {
+    const submenu = [];
+    for (let i = 1; i <= 60; i++) {
+      submenu.push({
+        label: `${i} minute${i > 1 ? 's' : ''}`,
+        type: 'radio',
+        checked: current === i,
+        click: () => callback(i)
+      });
+    }
+    return submenu;
+  };
+  
+  // Generate project submenu for break project selection
+  const generateProjectSubmenu = () => {
+    const submenu = [];
+    todoistProjects.forEach(project => {
+      submenu.push({
+        label: project.name,
+        click: () => setBreakProjectForCurrentProject(project.id)
+      });
+    });
+    return submenu;
+  };
+  
+  return [
+    {
+      label: 'Start/Pause Pomodoro',
+      click: () => {
+        if (pomodoroState.isActive) {
+          pausePomodoroTimer();
+        } else {
+          startPomodoroTimer();
+        }
+      }
+    },
+    {
+      label: 'Reset Pomodoro',
+      click: () => resetPomodoroTimer()
+    },
+    { type: 'separator' },
+    {
+      label: 'Work Time',
+      submenu: generateMinutesSubmenu(pomodoroState.workTime, setPomodoroWorkTime)
+    },
+    {
+      label: 'Break Time',
+      submenu: generateMinutesSubmenu(pomodoroState.breakTime, setPomodoroBreakTime)
+    },
+    { type: 'separator' },
+    {
+      label: 'Set Break Project for Current Project',
+      submenu: generateProjectSubmenu()
+    }
+  ];
+}
+
 function createWindow() {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.workAreaSize;
@@ -841,6 +1172,10 @@ function createTray() {
             }
         },
         {
+            label: 'Pomodoro Settings',
+            submenu: createPomodoroSubmenu()
+        },
+        {
             label: 'Clear API Token',
             click: () => {
                 console.log('Clearing API token triggered.');
@@ -892,10 +1227,10 @@ function updateTransparency() {
 
 app.whenReady().then(() => {
     createWindow();
-    createTray() //is now called after projects are fetched in did-finish-load
-    // fetchTodoistProjects(); // Moved to did-finish-load
+    createTray();
     updateTransparency();
     restoreAppState();
+    loadPomodoroSettings(); // Add this line
 });
 
 app.on('window-all-closed', () => {
@@ -924,4 +1259,30 @@ app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
     }
+});
+
+// Add these IPC handlers for Pomodoro operations
+ipcMain.on('start-pomodoro', () => {
+  console.log('Main: Received start-pomodoro');
+  if (pomodoroState.isActive) {
+    pausePomodoroTimer();
+  } else {
+    startPomodoroTimer();
+  }
+});
+
+ipcMain.on('reset-pomodoro', () => {
+  console.log('Main: Received reset-pomodoro');
+  resetPomodoroTimer();
+});
+
+ipcMain.on('get-pomodoro-state', (event) => {
+  console.log('Main: Received get-pomodoro-state');
+  event.reply('pomodoro-update', {
+    isActive: pomodoroState.isActive,
+    isBreak: pomodoroState.isBreak,
+    timeRemaining: pomodoroState.timeRemaining,
+    workTime: pomodoroState.workTime,
+    breakTime: pomodoroState.breakTime
+  });
 });

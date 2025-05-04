@@ -7,6 +7,8 @@ const closeModal = document.querySelector('.close-modal');
 const newTaskInput = document.getElementById('new-task-content');
 const projectSelect = document.getElementById('project-select');
 const submitNewTaskBtn = document.getElementById('submit-new-task');
+const pomodoroBtn = document.getElementById('pomodoro-button');
+const timerDisplay = document.getElementById('timer-display');
 
 // --- State variables ---
 let isRightMouseDown = false; // Tracks if the right mouse button is currently pressed
@@ -17,6 +19,15 @@ const EXPANDED_HEIGHT = 260; // Expanded window height when adding a task
 
 // Define selectedProjectId to track the currently selected project
 let selectedProjectId = null; // Initially null, updated when a project is selected
+
+// Pomodoro state
+let pomodoroState = {
+  isActive: false,
+  isBreak: false,
+  timeRemaining: 0,
+  workTime: 25,
+  breakTime: 5
+};
 
 // --- Initialize projects dropdown ---
 function populateProjectsDropdown(projects) {
@@ -271,6 +282,104 @@ if (window.electronAPI) {
             taskContainer.style.cursor = 'pointer'; // Or back to 'default' if preferred
         }
     });
+
+    // --- Pomodoro Timer UI Functions ---
+
+    // Format seconds into MM:SS display
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    // Update the timer display and UI based on Pomodoro state
+    function updatePomodoroUI(state) {
+        // Update local state
+        pomodoroState = state;
+        
+        // Update timer display
+        timerDisplay.textContent = formatTime(state.timeRemaining);
+        
+        // Update button appearance
+        if (state.isActive) {
+            pomodoroBtn.textContent = '⏸'; // Pause symbol
+            pomodoroBtn.classList.add('active');
+            pomodoroBtn.title = 'Pause Pomodoro timer';
+        } else {
+            pomodoroBtn.textContent = '▶'; // Play symbol
+            pomodoroBtn.classList.remove('active');
+            pomodoroBtn.title = 'Start Pomodoro timer';
+        }
+        
+        // Update mode styling
+        document.body.classList.remove('work-mode', 'break-mode');
+        if (state.isBreak) {
+            document.body.classList.add('break-mode');
+        } else {
+            document.body.classList.add('work-mode');
+        }
+    }
+
+    // Show a notification for Pomodoro events
+    function showNotification(notification) {
+        // For systems that support native notifications
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(notification.title, {
+                body: notification.body,
+                silent: false
+            });
+        }
+        
+        // For custom in-app notifications (for future theming)
+        const notificationElement = document.createElement('div');
+        notificationElement.className = 'theme-notification';
+        notificationElement.textContent = `${notification.title} ${notification.body}`;
+        document.body.appendChild(notificationElement);
+        
+        // Show the notification
+        setTimeout(() => {
+            notificationElement.classList.add('show');
+        }, 10);
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+            notificationElement.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(notificationElement);
+            }, 300);
+        }, 5000);
+    }
+
+    // --- Pomodoro Event Listeners ---
+
+    // Start/pause the Pomodoro timer
+    pomodoroBtn.addEventListener('click', () => {
+        window.electronAPI.startPomodoro();
+    });
+
+    // Request permission for notifications
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+    }
+
+    // --- Pomodoro API Handlers ---
+
+    // Handle Pomodoro state updates
+    if (window.electronAPI) {
+        window.electronAPI.onPomodoroUpdate((state) => {
+            console.log('Renderer: Received Pomodoro state update', state);
+            updatePomodoroUI(state);
+        });
+        
+        // Handle notifications
+        window.electronAPI.onShowNotification((notification) => {
+            console.log('Renderer: Received notification', notification);
+            showNotification(notification);
+        });
+        
+        // Get initial Pomodoro state
+        window.electronAPI.getPomodoroState();
+    }
 
     // Initial text
     taskContainer.textContent = 'Initializing...';

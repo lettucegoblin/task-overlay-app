@@ -74,6 +74,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Expose a method to listen for project changes
     onProjectChanged: (callback) => {
         ipcRenderer.on('project-changed', (_event, projectId) => callback(projectId));
+    },
+
+    // --- Pomodoro Timer Operations ---
+    startPomodoro: () => {
+        console.log('Preload: Sending start-pomodoro');
+        ipcRenderer.send('start-pomodoro');
+    },
+    resetPomodoro: () => {
+        console.log('Preload: Sending reset-pomodoro');
+        ipcRenderer.send('reset-pomodoro');
+    },
+    getPomodoroState: () => {
+        console.log('Preload: Sending get-pomodoro-state');
+        ipcRenderer.send('get-pomodoro-state');
+    },
+    onPomodoroUpdate: (callback) => {
+        ipcRenderer.on('pomodoro-update', (_event, state) => callback(state));
+    },
+    onShowNotification: (callback) => {
+        ipcRenderer.on('show-notification', (_event, notification) => callback(notification));
     }
 });
 

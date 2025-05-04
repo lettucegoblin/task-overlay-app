@@ -157,3 +157,75 @@ input, select, button {
 /* cursor: grabbing; */
 /* } */
 
+/* Add these styles for Pomodoro UI elements */
+
+/* Timer display */
+#timer-display {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+  margin: 5px 0;
+  user-select: none;
+}
+
+/* Pomodoro button */
+#pomodoro-button {
+  background-color: rgba(100, 80, 160, 0.9);
+}
+
+#pomodoro-button:hover {
+  background-color: rgba(120, 100, 180, 0.9);
+}
+
+/* Active timer styles */
+#pomodoro-button.active {
+  background-color: rgba(200, 60, 60, 0.9);
+}
+
+#pomodoro-button.active:hover {
+  background-color: rgba(220, 80, 80, 0.9);
+}
+
+/* Break mode styles */
+body.break-mode #task-container {
+  background-color: rgba(20, 60, 40, 0.85);
+}
+
+body.break-mode #timer-display {
+  color: #8effb1;
+}
+
+/* Work mode styles */
+body.work-mode #task-container {
+  background-color: rgba(60, 20, 40, 0.85);
+}
+
+body.work-mode #timer-display {
+  color: #ffb18e;
+}
+
+/* Notification styles for future theme extensions */
+.theme-notification {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 10px;
+  background-color: rgba(40, 40, 60, 0.9);
+  color: white;
+  border-radius: 5px;
+  font-size: 14px;
+  max-width: 300px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 1000;
+}
+
+.theme-notification.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
