@@ -721,6 +721,42 @@ function createTray() {
         });
     });
 
+    // Transparency settings submenu
+    const transparencySubmenu = [
+        {
+            label: 'Just Global Transparency',
+            type: 'submenu',
+            submenu: Array.from({ length: 10 }, (_, i) => {
+                const percentage = (i + 1) * 10;
+                return {
+                    label: `${percentage}%`,
+                    type: 'radio',
+                    checked: store.get('globalTransparency', 100) === percentage,
+                    click: () => {
+                        store.set('globalTransparency', percentage);
+                        updateTransparency();
+                    }
+                };
+            })
+        },
+        {
+            label: 'Click-Through Transparency',
+            type: 'submenu',
+            submenu: Array.from({ length: 10 }, (_, i) => {
+                const percentage = (i + 1) * 10;
+                return {
+                    label: `${percentage}%`,
+                    type: 'radio',
+                    checked: store.get('clickThroughTransparency', 100) === percentage,
+                    click: () => {
+                        store.set('clickThroughTransparency', percentage);
+                        updateTransparency();
+                    }
+                };
+            })
+        }
+    ];
+
     const contextMenuTemplate = [
         {
           label: 'Open Dev Tools',
@@ -742,6 +778,10 @@ function createTray() {
             submenu: projectSubmenu // Add the dynamic submenu
         },
         {
+            label: 'Transparency Settings',
+            submenu: transparencySubmenu
+        },
+        {
             label: 'Toggle Click-Through',
             type: 'checkbox',
             checked: isClickThrough,
@@ -756,6 +796,7 @@ function createTray() {
                     const toggleItem = contextMenu.items.find(item => item.label === 'Toggle Click-Through');
                     if (toggleItem) toggleItem.checked = isClickThrough;
                     console.log(`Click-through toggled: ${isClickThrough}`);
+                    updateTransparency();
                 }
             }
         },
@@ -793,12 +834,27 @@ function createTray() {
     tray.setContextMenu(contextMenu);
 }
 
+// Function to update transparency based on settings
+function updateTransparency() {
+    const globalTransparency = store.get('globalTransparency', 100) / 100;
+    const clickThroughTransparency = store.get('clickThroughTransparency', 100) / 100;
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (isClickThrough) {
+            mainWindow.setOpacity(clickThroughTransparency);
+        } else {
+            mainWindow.setOpacity(globalTransparency);
+        }
+    }
+}
+
 // --- Application Lifecycle ---
 
 app.whenReady().then(() => {
     createWindow();
     createTray() //is now called after projects are fetched in did-finish-load
     // fetchTodoistProjects(); // Moved to did-finish-load
+    updateTransparency();
 });
 
 app.on('window-all-closed', () => {
