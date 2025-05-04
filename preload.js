@@ -140,6 +140,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onSettingsChanged: (callback) => {
         ipcRenderer.on('settings-changed', (_event, settings) => callback(settings));
+    },
+     // --- Theme System API ---
+    
+    // Get available themes
+    invoke: async (channel, ...args) => {
+        if (channel.startsWith('theme:')) {
+            return await ipcRenderer.invoke(channel, ...args);
+        }
+        console.error(`Preload: Unsupported invoke channel: ${channel}`);
+        return null;
+    },
+    
+    // Send theme event to main process
+    sendThemeEvent: (event) => {
+        console.log('Preload: Sending theme:event', event);
+        ipcRenderer.send('theme:event', event);
+    },
+    
+    // Receive theme changed event
+    onThemeChanged: (callback) => {
+        ipcRenderer.on('theme:changed', (_event, theme) => callback(theme));
+    },
+    
+    // Receive theme settings changed event
+    onThemeSettingsChanged: (callback) => {
+        ipcRenderer.on('theme:settings-updated', (_event, data) => callback(data));
+    },
+    
+    // Receive theme event from main process
+    onThemeEvent: (callback) => {
+        ipcRenderer.on('theme:event', (_event, data) => callback(data));
+    },
+    
+    // Start next Pomodoro phase
+    startNextPhase: () => {
+        console.log('Preload: Sending pomodoro:start-next-phase');
+        ipcRenderer.send('pomodoro:start-next-phase');
     }
 });
 

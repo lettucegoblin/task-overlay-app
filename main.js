@@ -604,6 +604,11 @@ ipcMain.on('get-selected-project-id', (event) => {
   event.returnValue = todoistService.selectedProjectId;
 });
 
+ipcMain.on('pomodoro:start-next-phase', () => {
+  console.log('Main: Received pomodoro:start-next-phase');
+  pomodoroService.startNextPhase();
+});
+
 // Start/pause Pomodoro
 ipcMain.on('start-pomodoro', () => {
   console.log('Main: Received start-pomodoro');
