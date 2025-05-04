@@ -8,6 +8,13 @@ const fs = require('fs'); // For file operations with .env
 require('dotenv').config(); // Load .env file
 const Store = require('electron-store'); // Add persistent storage
 
+// Require core services
+const todoistService = require('./src/core/todoist-service');
+const pomodoroService = require('./src/core/pomodoro-service');
+const settingsService = require('./src/core/settings-service');
+const eventBus = require('./src/core/event-bus');
+const themeManager = require('./src/ui/theme-manager');
+
 // Create the store for API token
 const store = new Store({
     schema: {
@@ -1285,4 +1292,233 @@ ipcMain.on('get-pomodoro-state', (event) => {
     workTime: pomodoroState.workTime,
     breakTime: pomodoroState.breakTime
   });
+});
+
+// --- IPC Handlers for Theme System ---
+
+// Get available themes
+ipcMain.handle('get-available-themes', async () => {
+  // Discover themes if not already done
+  if (themeManager.getAllThemes().size === 0) {
+    await themeManager.discoverThemes();
+  }
+  
+  // Convert the Map to an array of theme info objects
+  const themes = Array.from(themeManager.getAllThemes().entries()).map(([name, theme]) => ({
+    name,
+    displayName: theme.displayName,
+    description: theme.description
+  }));
+  
+  return themes;
+});
+
+// Get active theme
+ipcMain.handle('get-active-theme', () => {
+  const activeTheme = themeManager.getActiveTheme();
+  
+  if (!activeTheme) {
+    return null;
+  }
+  
+  return {
+    name: activeTheme.name,
+    displayName: activeTheme.displayName,
+    description: activeTheme.description
+  };
+});
+
+// Set active theme
+ipcMain.handle('set-active-theme', async (_event, themeName) => {
+  if (!themeManager.hasTheme(themeName)) {
+    return { success: false, error: 'Theme not found' };
+  }
+  
+  try {
+    await themeManager.activateTheme(themeName);
+    return { success: true };
+  } catch (error) {
+    console.error('Error activating theme:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get theme settings
+ipcMain.handle('get-theme-settings', (_event, themeName) => {
+  const theme = themeManager.getTheme(themeName);
+  
+  if (!theme) {
+    return null;
+  }
+  
+  return theme.getSettings();
+});
+
+// Save theme settings
+ipcMain.handle('save-theme-settings', (_event, themeName, settings) => {
+  const theme = themeManager.getTheme(themeName);
+  
+  if (!theme) {
+    return { success: false, error: 'Theme not found' };
+  }
+  
+  try {
+    theme.updateSettings(settings);
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving theme settings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get app settings
+ipcMain.handle('get-app-settings', () => {
+  return {
+    appearance: settingsService.getAppearanceSettings(),
+    window: settingsService.getWindowSettings(),
+    pomodoro: settingsService.getPomodoroSettings()
+  };
+});
+
+// Save app settings
+ipcMain.handle('save-app-settings', (_event, settings) => {
+  try {
+    if (settings.appearance) {
+      settingsService.saveAppearanceSettings(settings.appearance);
+    }
+    
+    if (settings.window) {
+      settingsService.saveWindowSettings(settings.window);
+    }
+    
+    if (settings.pomodoro) {
+      settingsService.savePomodoroSettings(settings.pomodoro);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving app settings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// --- Replace old IPC handlers with calls to services ---
+
+// Next task
+ipcMain.on('get-next-task', (event) => {
+  console.log('Main: Received get-next-task');
+  const task = todoistService.nextTask();
+  
+  // For backward compatibility
+  if (task) {
+    event.sender.send('display-task', 
+      task.content, 
+      task.id,
+      todoistService.projects);
+  } else {
+    event.sender.send('display-task', 'No tasks available.', null, todoistService.projects);
+  }
+});
+
+// Complete task
+ipcMain.on('complete-task', (_event, taskId) => {
+  console.log('Main: Received complete-task for ID:', taskId);
+  if (taskId) {
+    todoistService.completeTask(taskId);
+  } else {
+    console.error('Task ID missing');
+  }
+});
+
+// Add task
+ipcMain.on('add-task', (_event, taskData) => {
+  console.log('Main: Received add-task:', taskData);
+  if (taskData && taskData.content) {
+    todoistService.addTask(taskData.content, taskData.projectId);
+  } else {
+    console.error('Task data missing');
+  }
+});
+
+// Get projects
+ipcMain.on('get-projects', (event) => {
+  console.log('Main: Received get-projects');
+  event.sender.send('projects-list', todoistService.projects);
+  
+  // Fetch fresh projects
+  todoistService.fetchProjects();
+});
+
+// Save API key
+ipcMain.on('save-api-key', (_event, apiKey) => {
+  console.log('Main: Received save-api-key');
+  if (apiKey) {
+    todoistService.setApiKey(apiKey);
+  } else {
+    console.error('API key is missing or empty');
+  }
+});
+
+// Pomodoro start/pause
+ipcMain.on('start-pomodoro', () => {
+  console.log('Main: Received start-pomodoro');
+  pomodoroService.toggle();
+});
+
+// Pomodoro reset
+ipcMain.on('reset-pomodoro', () => {
+  console.log('Main: Received reset-pomodoro');
+  pomodoroService.reset();
+});
+
+// Get Pomodoro state
+ipcMain.on('get-pomodoro-state', (event) => {
+  console.log('Main: Received get-pomodoro-state');
+  event.reply('pomodoro-update', pomodoroService.getState());
+});
+
+// --- Subscribe to core events to forward to the renderer ---
+
+// Forward Pomodoro timer tick events
+eventBus.subscribe(pomodoroService.getEvents().TIMER_TICK, (state) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-update', state);
+  }
+});
+
+// Forward Pomodoro timer completion events
+eventBus.subscribe(pomodoroService.getEvents().TIMER_COMPLETED, (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const title = data.nextMode === 'break' ? 'Break Time!' : 'Back to Work!';
+    const body = data.nextMode === 'break' 
+      ? `Time for a ${pomodoroService.getState().breakTime} minute break.` 
+      : `Time for a ${pomodoroService.getState().workTime} minute work session.`;
+    
+    mainWindow.webContents.send('show-notification', { title, body });
+  }
+});
+
+// Forward settings changes
+eventBus.subscribe(settingsService.getEvents().SETTINGS_CHANGED, (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('settings-changed', data);
+  }
+});
+
+// --- Modify app.whenReady to initialize services ---
+
+app.whenReady().then(async () => {
+  createWindow();
+  
+  // Discover and initialize themes
+  await themeManager.discoverThemes();
+  
+  // Create tray after themes are loaded
+  createTray();
+  
+  // Initialize appearance
+  updateTransparency();
+  
+  // Initialize state
+  await themeManager.loadSavedTheme();
 });

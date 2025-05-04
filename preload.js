@@ -2,7 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    // Task cycling (unchanged)
+    // --- Task Operations ---
     getNextTask: () => {
         console.log('Preload: Sending get-next-task');
         ipcRenderer.send('get-next-task');
@@ -10,8 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDisplayTask: (callback) => {
         ipcRenderer.on('display-task', (_event, value, taskId, projectsList) => callback(value, taskId, projectsList));
     },
-
-    // --- Todoist Task Operations ---
     completeTask: (taskId) => {
         console.log('Preload: Sending complete-task', taskId);
         ipcRenderer.send('complete-task', taskId);
@@ -20,12 +18,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         console.log('Preload: Sending add-task', content, projectId);
         ipcRenderer.send('add-task', { content, projectId });
     },
+
+    // --- Project Operations ---
     getProjects: () => {
         console.log('Preload: Sending get-projects');
         ipcRenderer.send('get-projects');
     },
     onProjectsReceived: (callback) => {
         ipcRenderer.on('projects-list', (_event, projectsList) => callback(projectsList));
+    },
+    getSelectedProjectId: () => {
+        console.log('Preload: Requesting selected project ID');
+        return ipcRenderer.sendSync('get-selected-project-id');
+    },
+    onProjectChanged: (callback) => {
+        ipcRenderer.on('project-changed', (_event, projectId) => callback(projectId));
     },
     
     // --- API Key Operations ---
@@ -49,34 +56,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // --- Dragging Communication ---
-    // Send message to main process to indicate drag start
     startDrag: () => {
         console.log('Preload: Sending start-drag');
         ipcRenderer.send('start-drag');
     },
-    // Send message to main process with current mouse position during drag
     sendDragData: (mousePos) => {
         // No console log here to avoid flooding during drag
-        ipcRenderer.send('dragging', mousePos); // Pass mouse position object
+        ipcRenderer.send('dragging', mousePos);
     },
-    // Send message to main process to indicate drag end
     endDrag: () => {
         console.log('Preload: Sending end-drag');
         ipcRenderer.send('end-drag');
     },
 
-    // Expose a method to get the selected project ID
-    getSelectedProjectId: () => {
-        console.log('Preload: Requesting selected project ID');
-        return ipcRenderer.sendSync('get-selected-project-id');
-    },
-
-    // Expose a method to listen for project changes
-    onProjectChanged: (callback) => {
-        ipcRenderer.on('project-changed', (_event, projectId) => callback(projectId));
-    },
-
-    // --- Pomodoro Timer Operations ---
+    // --- Pomodoro Operations ---
     startPomodoro: () => {
         console.log('Preload: Sending start-pomodoro');
         ipcRenderer.send('start-pomodoro');
@@ -94,6 +87,44 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onShowNotification: (callback) => {
         ipcRenderer.on('show-notification', (_event, notification) => callback(notification));
+    },
+    
+    // --- NEW Theme Operations ---
+    getAvailableThemes: () => {
+        console.log('Preload: Sending get-available-themes');
+        ipcRenderer.send('get-available-themes');
+    },
+    onThemesReceived: (callback) => {
+        ipcRenderer.on('themes-list', (_event, themesList) => callback(themesList));
+    },
+    getActiveTheme: () => {
+        console.log('Preload: Requesting active theme');
+        return ipcRenderer.sendSync('get-active-theme');
+    },
+    setActiveTheme: (themeName) => {
+        console.log('Preload: Sending set-active-theme', themeName);
+        ipcRenderer.send('set-active-theme', themeName);
+    },
+    getThemeSettings: (themeName) => {
+        console.log('Preload: Requesting theme settings for', themeName);
+        return ipcRenderer.sendSync('get-theme-settings', themeName);
+    },
+    saveThemeSettings: (themeName, settings) => {
+        console.log('Preload: Sending save-theme-settings', themeName, settings);
+        ipcRenderer.send('save-theme-settings', themeName, settings);
+    },
+    
+    // --- NEW App Settings Operations ---
+    getAppSettings: () => {
+        console.log('Preload: Requesting app settings');
+        return ipcRenderer.sendSync('get-app-settings');
+    },
+    saveAppSettings: (settings) => {
+        console.log('Preload: Sending save-app-settings', settings);
+        ipcRenderer.send('save-app-settings', settings);
+    },
+    onSettingsChanged: (callback) => {
+        ipcRenderer.on('settings-changed', (_event, settings) => callback(settings));
     }
 });
 
