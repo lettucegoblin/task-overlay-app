@@ -188,6 +188,13 @@ function restoreAppState() {
     }
 }
 
+// Function to notify renderer of project changes
+function notifyProjectChanged(projectId) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('project-changed', projectId);
+    }
+}
+
 // Modified function to fetch tasks, accepting an optional projectId
 function fetchTodoistTasks(projectId = null) {
     if (!apiKeyExists()) {
@@ -239,6 +246,8 @@ function fetchTodoistTasks(projectId = null) {
                     } else if (mainWindow && !mainWindow.isDestroyed()) {
                          mainWindow.webContents.send('display-task', 'No tasks found.', null, todoistProjects);
                     }
+                    // Notify renderer of project change
+                    notifyProjectChanged(projectId);
                 } catch (e) {
                     console.error('Error parsing Todoist response:', e);
                     mainWindow?.webContents.send('display-task', 'Error: Parse Failed', null, todoistProjects);
@@ -641,6 +650,12 @@ ipcMain.on('get-projects', (event) => {
 ipcMain.on('request-api-key', (event) => {
     console.log('Main: Received request-api-key');
     promptForApiKey();
+});
+
+// IPC handler to get the selected project ID
+ipcMain.on('get-selected-project-id', (event) => {
+    console.log('Main: Sending selected project ID:', selectedProjectId);
+    event.returnValue = selectedProjectId;
 });
 
 // --- Drag Handling ---

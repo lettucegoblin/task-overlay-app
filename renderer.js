@@ -15,6 +15,9 @@ let currentTaskId = null; // Stores the ID of the currently displayed task
 const DEFAULT_HEIGHT = 60; // Default window height
 const EXPANDED_HEIGHT = 260; // Expanded window height when adding a task
 
+// Define selectedProjectId to track the currently selected project
+let selectedProjectId = null; // Initially null, updated when a project is selected
+
 // --- Initialize projects dropdown ---
 function populateProjectsDropdown(projects) {
     // Clear all options except the first one
@@ -122,6 +125,20 @@ if (window.electronAPI) {
     window.electronAPI.onProjectsReceived((projectsList) => {
         console.log("Renderer received projects list:", projectsList);
         populateProjectsDropdown(projectsList);
+
+        // Update selectedProjectId if a project is already selected
+        const restoredProjectId = window.electronAPI.getSelectedProjectId();
+        if (restoredProjectId) {
+            selectedProjectId = restoredProjectId;
+            projectSelect.value = restoredProjectId;
+        }
+    });
+
+    // Listen for project changes from the main process
+    window.electronAPI.onProjectChanged((projectId) => {
+        console.log("Renderer: Project changed to:", projectId);
+        selectedProjectId = projectId;
+        projectSelect.value = projectId;
     });
 
     // --- Get initial projects list ---
@@ -153,7 +170,12 @@ if (window.electronAPI) {
     addTaskBtn.addEventListener('click', () => {
         modal.style.display = 'block';
         newTaskInput.focus();
-        
+
+        // Preselect the current project in the dropdown
+        if (projectSelect && selectedProjectId) {
+            projectSelect.value = selectedProjectId;
+        }
+
         // Save position and resize the window to the expanded height
         window.electronAPI.savePositionAndResize(EXPANDED_HEIGHT);
     });

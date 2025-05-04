@@ -63,6 +63,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     endDrag: () => {
         console.log('Preload: Sending end-drag');
         ipcRenderer.send('end-drag');
+    },
+
+    // Expose a method to get the selected project ID
+    getSelectedProjectId: () => {
+        console.log('Preload: Requesting selected project ID');
+        return ipcRenderer.sendSync('get-selected-project-id');
+    },
+
+    // Expose a method to listen for project changes
+    onProjectChanged: (callback) => {
+        ipcRenderer.on('project-changed', (_event, projectId) => callback(projectId));
     }
 });
 
