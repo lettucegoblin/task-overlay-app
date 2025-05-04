@@ -165,6 +165,29 @@ function clearApiKey() {
     }
 }
 
+// Function to save the current state (selected project and task index)
+function saveAppState() {
+    store.set('selectedProjectId', selectedProjectId);
+    store.set('currentTaskIndex', currentTaskIndex);
+    console.log('App state saved:', { selectedProjectId, currentTaskIndex });
+}
+
+// Function to restore the saved state
+function restoreAppState() {
+    selectedProjectId = store.get('selectedProjectId', null);
+    currentTaskIndex = store.get('currentTaskIndex', 0);
+    console.log('App state restored:', { selectedProjectId, currentTaskIndex });
+
+    // Fetch tasks for the saved project and set the current task
+    fetchTodoistTasks(selectedProjectId);
+    if (todoistTasks.length > 0 && currentTaskIndex < todoistTasks.length) {
+        mainWindow?.webContents.send('display-task', 
+            todoistTasks[currentTaskIndex], 
+            todoistTaskIds[currentTaskIndex], 
+            todoistProjects);
+    }
+}
+
 // Modified function to fetch tasks, accepting an optional projectId
 function fetchTodoistTasks(projectId = null) {
     if (!apiKeyExists()) {
@@ -208,6 +231,7 @@ function fetchTodoistTasks(projectId = null) {
                     currentTaskIndex = 0; // Reset index
                     if (mainWindow && !mainWindow.isDestroyed() && todoistTasks.length > 0) {
                         // Pass task content, ID, and projects list
+                        saveAppState(); // Save the state after fetching tasks
                         mainWindow.webContents.send('display-task', 
                             todoistTasks[currentTaskIndex], 
                             todoistTaskIds[currentTaskIndex], 
@@ -503,6 +527,7 @@ ipcMain.on('get-next-task', (event) => {
     console.log('Main: Received get-next-task');
     if (todoistTasks.length > 0) {
         currentTaskIndex = (currentTaskIndex + 1) % todoistTasks.length;
+        saveAppState(); // Save the updated task index
         event.sender.send('display-task', 
             todoistTasks[currentTaskIndex], 
             todoistTaskIds[currentTaskIndex],
@@ -855,6 +880,7 @@ app.whenReady().then(() => {
     createTray() //is now called after projects are fetched in did-finish-load
     // fetchTodoistProjects(); // Moved to did-finish-load
     updateTransparency();
+    restoreAppState();
 });
 
 app.on('window-all-closed', () => {
