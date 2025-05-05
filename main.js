@@ -609,7 +609,7 @@ ipcMain.on('pomodoro:start-next-phase', () => {
   pomodoroService.startNextPhase();
 });
 
-// Start/pause Pomodoro
+// Start/pause Pomodoro 
 ipcMain.on('start-pomodoro', () => {
   console.log('Main: Received start-pomodoro');
   pomodoroService.toggle();

@@ -270,52 +270,13 @@ class PomodoroService {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
+    this.state.isActive = false;
     
     // Publish the event
     eventBus.publish(EVENTS.TIMER_COMPLETED, {
       wasBreak: this.state.isBreak,
       nextMode: !this.state.isBreak ? 'break' : 'work'
     });
-    
-    // Toggle between work and break
-    this.state.isBreak = !this.state.isBreak;
-    
-    // Set the new time based on the mode
-    this.state.timeRemaining = this.state.isBreak ? 
-      this.state.breakTime * 60 : 
-      this.state.workTime * 60;
-    
-    // Publish the appropriate event for the new mode
-    if (this.state.isBreak) {
-      eventBus.publish(EVENTS.BREAK_STARTED, this.getState());
-    } else {
-      eventBus.publish(EVENTS.WORK_STARTED, this.getState());
-    }
-    
-    console.log(`PomodoroService: Timer completed, switched to ${this.state.isBreak ? 'break' : 'work'} mode`);
-    
-    // Restart the timer automatically
-    this.start();
-  }
-
-  /**
-   * Handle timer completion without automatic transition
-   * Similar to the existing _handleTimerComplete but without auto-starting
-   */
-  _handleTimerCompleteWithoutAutoStart() {
-    // Clear the interval
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
-
-    // Publish the event
-    eventBus.publish(EVENTS.TIMER_COMPLETED, {
-      wasBreak: this.state.isBreak,
-      nextMode: !this.state.isBreak ? 'break' : 'work'
-    });
-
-    console.log(`PomodoroService: Timer completed, but not auto-transitioning`);
   }
 
   /**
@@ -324,24 +285,24 @@ class PomodoroService {
    */
   startNextPhase() {
     console.log('PomodoroService: Starting next phase manually');
-
+    
     // Toggle between work and break
     this.state.isBreak = !this.state.isBreak;
-
+    
     // Set the new time based on the mode
     this.state.timeRemaining = this.state.isBreak ? 
       this.state.breakTime * 60 : 
       this.state.workTime * 60;
-
+    
     // Publish the appropriate event for the new mode
     if (this.state.isBreak) {
       eventBus.publish(EVENTS.BREAK_STARTED, this.getState());
     } else {
       eventBus.publish(EVENTS.WORK_STARTED, this.getState());
     }
-
+    
     console.log(`PomodoroService: Switched to ${this.state.isBreak ? 'break' : 'work'} mode`);
-
+    
     // Start the timer automatically
     this.start();
   }

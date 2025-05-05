@@ -2,6 +2,7 @@
  * Default Theme - Renderer implementation
  * 
  * Implements the default minimal theme UI.
+ * Refactored to match existing functionality with the new architecture.
  */
 
 class DefaultThemeRenderer {
@@ -20,6 +21,8 @@ class DefaultThemeRenderer {
     // State
     this.currentTask = null;
     this.pomodoroState = null;
+    this.isDragging = false;
+    this.lastMousePos = null;
     
     // Event listeners
     this.listeners = [];
@@ -70,6 +73,10 @@ class DefaultThemeRenderer {
         this._handleTaskCompletion(data);
         break;
         
+      case 'task:added':
+        this._handleTaskAdded(data);
+        break;
+        
       case 'pomodoro:tick':
         this._updateTimerDisplay(data);
         break;
@@ -79,11 +86,13 @@ class DefaultThemeRenderer {
         break;
         
       case 'pomodoro:work-started':
-        this._setWorkMode(data);
+        this._setWorkMode(data.state);
+        this._showNotification(data.title, data.body);
         break;
         
       case 'pomodoro:break-started':
-        this._setBreakMode(data);
+        this._setBreakMode(data.state);
+        this._showNotification(data.title, data.body);
         break;
     }
   }
@@ -209,14 +218,13 @@ class DefaultThemeRenderer {
    */
   _setupDragHandling() {
     let isRightMouseDown = false;
-    let lastMousePos = null;
     
     // Mouse down
     this._addListener(this.elements.taskContainer, 'mousedown', (event) => {
       // Only handle right-clicks
       if (event.button === 2) {
         isRightMouseDown = true;
-        lastMousePos = { x: event.screenX, y: event.screenY };
+        this.lastMousePos = { x: event.screenX, y: event.screenY };
         
         // Tell main process to prepare for dragging
         window.electronAPI.startDrag();
@@ -231,7 +239,7 @@ class DefaultThemeRenderer {
       if (isRightMouseDown) {
         const currentMousePos = { x: event.screenX, y: event.screenY };
         window.electronAPI.sendDragData(currentMousePos);
-        lastMousePos = currentMousePos;
+        this.lastMousePos = currentMousePos;
       }
     });
     
@@ -239,7 +247,7 @@ class DefaultThemeRenderer {
     this._addListener(window, 'mouseup', (event) => {
       if (event.button === 2 && isRightMouseDown) {
         isRightMouseDown = false;
-        lastMousePos = null;
+        this.lastMousePos = null;
         
         // Tell main process that dragging has finished
         window.electronAPI.endDrag();
@@ -279,6 +287,9 @@ class DefaultThemeRenderer {
       this.elements.taskContainer.textContent = task.content || 'No tasks available.';
     }
     
+    // Store current task ID in window for API access
+    window.currentTaskId = task.id;
+    
     // Update complete button state
     if (this.elements.completeTaskBtn) {
       if (task.id) {
@@ -297,7 +308,16 @@ class DefaultThemeRenderer {
    */
   _handleTaskCompletion(data) {
     // Show completion notification
-    this.themeAPI.showNotification('Task Completed', 'Great job!');
+    this._showNotification('Task Completed', 'Great job!');
+  }
+  
+  /**
+   * Handle task added
+   * @param {Object} data - Task data
+   */
+  _handleTaskAdded(data) {
+    // Show notification
+    this._showNotification('Task Added', `Added: ${data.content.substring(0, 30)}${data.content.length > 30 ? '...' : ''}`);
   }
   
   /**
@@ -309,7 +329,7 @@ class DefaultThemeRenderer {
     
     // Update timer display
     if (this.elements.timerDisplay) {
-      this.elements.timerDisplay.textContent = this.themeAPI.formatTime(state.timeRemaining);
+      this.elements.timerDisplay.textContent = this._formatTime(state.timeRemaining);
     }
     
     // Update button appearance
@@ -332,11 +352,7 @@ class DefaultThemeRenderer {
    */
   _handlePomodoroCompletion(data) {
     // Show notification
-    if (data.wasBreak) {
-      this.themeAPI.showNotification('Break Completed', 'Back to work!');
-    } else {
-      this.themeAPI.showNotification('Work Completed', 'Time for a break!');
-    }
+    this._showNotification(data.title, data.body);
     
     // If not auto-starting, show a "Start Next Phase" button
     if (!this.themeAPI.themeSettings.autoStartNextPhase) {
@@ -363,10 +379,17 @@ class DefaultThemeRenderer {
       nextPhaseBtn.style.position = 'absolute';
       nextPhaseBtn.style.top = `${timerRect.bottom + 10}px`;
       nextPhaseBtn.style.left = `${timerRect.left}px`;
+      nextPhaseBtn.style.zIndex = "1000";
+      nextPhaseBtn.style.padding = "5px 10px";
+      nextPhaseBtn.style.backgroundColor = "#4CAF50";
+      nextPhaseBtn.style.color = "white";
+      nextPhaseBtn.style.border = "none";
+      nextPhaseBtn.style.borderRadius = "4px";
+      nextPhaseBtn.style.cursor = "pointer";
       
       // Add click handler
-      nextPhaseBtn.addEventListener('click', () => {
-        this.themeAPI.startNextPhase();
+      this._addListener(nextPhaseBtn, 'click', () => {
+        this.themeAPI.sendToMain('pomodoro:start-next-phase');
         nextPhaseBtn.remove();
       });
       
@@ -471,6 +494,26 @@ class DefaultThemeRenderer {
         this.elements.projectSelect.appendChild(option);
       });
     }
+  }
+  
+  /**
+   * Show a notification
+   * @param {string} title - Notification title
+   * @param {string} body - Notification body
+   */
+  _showNotification(title, body) {
+    this.themeAPI.showNotification(title, body);
+  }
+  
+  /**
+   * Format time for display
+   * @param {number} seconds - Time in seconds
+   * @returns {string} - Formatted time
+   */
+  _formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
   
   /**

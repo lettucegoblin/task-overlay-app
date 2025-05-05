@@ -2,6 +2,7 @@
  * Default Theme - Main process implementation
  * 
  * Implements the default minimal theme for the application.
+ * Refactored to use the new theme system architecture.
  */
 
 class DefaultTheme {
@@ -27,7 +28,9 @@ class DefaultTheme {
       backgroundColor: 'rgba(20, 20, 40, 0.85)',
       workBackgroundColor: 'rgba(60, 20, 40, 0.85)',
       breakBackgroundColor: 'rgba(20, 60, 40, 0.85)',
-      autoStartNextPhase: true
+      autoStartNextPhase: false,
+      globalTransparency: 100,
+      clickThroughTransparency: 80
     };
     
     console.log('DefaultTheme: Constructed');
@@ -88,6 +91,17 @@ class DefaultTheme {
   }
   
   /**
+   * Handle tasks loaded event
+   * @param {Object} data - Tasks data
+   */
+  onTasksLoaded(data) {
+    // Update local state if needed
+    if (data.currentTask) {
+      this.state.currentTask = data.currentTask;
+    }
+  }
+  
+  /**
    * Handle current task update
    * @param {Object} task - Current task
    */
@@ -111,6 +125,19 @@ class DefaultTheme {
     this.themeManager.sendToRenderer('theme:event', {
       themeName: this.name,
       eventName: 'task:completed',
+      data
+    });
+  }
+  
+  /**
+   * Handle task addition
+   * @param {Object} data - Task addition data
+   */
+  onTaskAdded(data) {
+    // Send task added event to renderer
+    this.themeManager.sendToRenderer('theme:event', {
+      themeName: this.name,
+      eventName: 'task:added',
       data
     });
   }
@@ -141,7 +168,12 @@ class DefaultTheme {
     this.themeManager.sendToRenderer('theme:event', {
       themeName: this.name,
       eventName: 'pomodoro:completed',
-      data
+      data: {
+        wasBreak: data.wasBreak,
+        nextMode: data.nextMode,
+        title: data.wasBreak ? 'Break Completed' : 'Work Completed',
+        body: data.wasBreak ? 'Time to work!' : 'Time for a break!'
+      }
     });
     
     // Auto-start next phase if enabled
@@ -164,7 +196,11 @@ class DefaultTheme {
     this.themeManager.sendToRenderer('theme:event', {
       themeName: this.name,
       eventName: 'pomodoro:work-started',
-      data: state
+      data: {
+        state,
+        title: 'Back to Work!',
+        body: `Time for a ${state.workTime} minute work session.`
+      }
     });
   }
   
@@ -180,8 +216,22 @@ class DefaultTheme {
     this.themeManager.sendToRenderer('theme:event', {
       themeName: this.name,
       eventName: 'pomodoro:break-started',
-      data: state
+      data: {
+        state,
+        title: 'Break Time!',
+        body: `Time for a ${state.breakTime} minute break.`
+      }
     });
+  }
+  
+  /**
+   * Handle theme settings changed
+   * @param {Object} data - Settings data
+   */
+  onThemeSettingsChanged(data) {
+    if (data && data.themeSettings && data.themeSettings[this.name]) {
+      this.updateSettings(data.themeSettings[this.name]);
+    }
   }
   
   /**
@@ -200,6 +250,20 @@ class DefaultTheme {
       case 'settings:update':
         this.updateSettings(data);
         break;
+        
+      case 'task:next':
+        // Request next task
+        this.services.todoist.nextTask();
+        break;
+        
+      case 'transparency:update':
+        // Update transparency settings
+        const appearanceSettings = this.services.settings.getAppearanceSettings();
+        this.services.settings.saveAppearanceSettings({
+          ...appearanceSettings,
+          ...data
+        });
+        break;
     }
   }
 }
@@ -216,7 +280,9 @@ const defaultTheme = {
     backgroundColor: 'rgba(20, 20, 40, 0.85)',
     workBackgroundColor: 'rgba(60, 20, 40, 0.85)',
     breakBackgroundColor: 'rgba(20, 60, 40, 0.85)',
-    autoStartNextPhase: true
+    autoStartNextPhase: false,
+    globalTransparency: 100,
+    clickThroughTransparency: 80
   }
 };
 

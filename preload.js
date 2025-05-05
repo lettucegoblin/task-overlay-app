@@ -141,7 +141,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onSettingsChanged: (callback) => {
         ipcRenderer.on('settings-changed', (_event, settings) => callback(settings));
     },
-     // --- Theme System API ---
+    // --- Theme System API ---
     
     // Get available themes
     invoke: async (channel, ...args) => {
@@ -177,7 +177,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     startNextPhase: () => {
         console.log('Preload: Sending pomodoro:start-next-phase');
         ipcRenderer.send('pomodoro:start-next-phase');
-    }
+    } 
 });
 
 console.log('Preload script loaded.');
