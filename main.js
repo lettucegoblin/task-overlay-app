@@ -8,6 +8,7 @@ const {
   Menu,
   dialog,
   nativeImage,
+  globalShortcut,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -58,6 +59,9 @@ function createWindow() {
     },
   });
 
+  // Make mainWindow available globally for theme-manager
+  global.mainWindow = mainWindow;
+
   // Set opacity based on settings
   updateTransparency();
 
@@ -77,6 +81,7 @@ function createWindow() {
   // Window close handler
   mainWindow.on("closed", () => {
     mainWindow = null;
+    global.mainWindow = null;
 
     // Clear interval on close
     if (boundaryCheckInterval) {
@@ -102,7 +107,13 @@ function createWindow() {
 async function initializeServices() {
   console.log("Initializing services...");
 
+  // Initialize themes first
+  await themeManager.discoverThemes();
+  await themeManager.loadSavedTheme();
+
+  // Check API key
   if (!(await todoistService.checkApiKey())) {
+    // API key is missing, the event will be handled by event listener
     return;
   }
 
@@ -110,9 +121,16 @@ async function initializeServices() {
   await todoistService.fetchProjects();
   await todoistService.fetchTasks();
 
-  // Initialize themes
-  await themeManager.discoverThemes();
-  await themeManager.loadSavedTheme();
+  // Send initial task to renderer
+  const currentTask = todoistService.getCurrentTask();
+  if (currentTask && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(
+      "display-task",
+      currentTask.content,
+      currentTask.id,
+      todoistService.projects
+    );
+  }
 }
 
 /**
@@ -924,7 +942,11 @@ eventBus.subscribe(settingsService.getEvents().SETTINGS_CHANGED, (data) => {
 // App ready
 app.whenReady().then(async () => {
   createWindow();
-  await themeManager.discoverThemes();
+  globalShortcut.register("CommandOrControl+Shift+I", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.openDevTools();
+    }
+  });
   createTray();
   updateTransparency();
 });
